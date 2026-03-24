@@ -3,6 +3,8 @@ const path = require('path');
 
 const SITE_DIR = path.join(__dirname, 'site');
 const DOMAIN = 'herramientasiaestudio.com';
+const ADSENSE_ID = 'ca-pub-XXXXXXXXXX'; // Replace with your real AdSense ID
+const GA_ID = 'G-XXXXXXXXXX'; // Replace with your real GA4 Measurement ID
 
 // ── helpers ──────────────────────────────────────────────
 function ensureDir(dir) {
@@ -29,14 +31,10 @@ function extractMeta(html) {
 }
 
 function stripComments(html) {
-  // Remove the metadata comment block at the top
   html = html.replace(/<!--[\s\S]*?={5,}[\s\S]*?-->\s*/, '');
-  // Remove ADSENSE placeholder comments
   html = html.replace(/<!--\s*\[ADSENSE:[\s\S]*?\]\s*-->\s*/g, '');
-  // Remove section separator comments
   html = html.replace(/<!--\s*=+\s*-->\s*/g, '');
   html = html.replace(/<!--\s*SECCIÓN:[\s\S]*?-->\s*/g, '');
-  // Remove wordpress form comments
   html = html.replace(/<!--\s*FORMULARIO[\s\S]*?-->\s*/g, '');
   html = html.replace(/<!--\s*\[contact-form[\s\S]*?-->\s*/g, '');
   html = html.replace(/<!--\s*Campos del formulario[\s\S]*?-->\s*/g, '');
@@ -47,11 +45,316 @@ function isLegalPage(slug) {
   return ['/politica-de-privacidad/', '/politica-de-cookies/', '/aviso-legal/', '/contacto/', '/sobre-nosotros/'].some(s => slug.includes(s));
 }
 
+// ── Reading time ─────────────────────────────────────────
+function estimateReadingTime(html) {
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = text.split(' ').length;
+  return Math.max(1, Math.ceil(words / 200));
+}
+
+// ── Auto Table of Contents ───────────────────────────────
+function generateTOC(html) {
+  const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
+  const headings = [];
+  let match;
+  while ((match = h2Regex.exec(html)) !== null) {
+    const text = match[1].replace(/<[^>]+>/g, '').trim();
+    const id = text.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    headings.push({ text, id });
+  }
+  if (headings.length < 3) return { toc: '', html };
+
+  let tocHtml = `<nav class="toc" aria-label="Tabla de contenidos">
+<p class="toc-title">Contenido del artículo</p>
+<ol>
+${headings.map(h => `  <li><a href="#${h.id}">${h.text}</a></li>`).join('\n')}
+</ol>
+</nav>`;
+
+  // Add IDs to h2 tags in the content
+  let modifiedHtml = html;
+  let idx = 0;
+  modifiedHtml = modifiedHtml.replace(/<h2([^>]*)>(.*?)<\/h2>/gi, (full, attrs, inner) => {
+    if (idx < headings.length) {
+      const heading = headings[idx++];
+      return `<h2${attrs} id="${heading.id}">${inner}</h2>`;
+    }
+    return full;
+  });
+
+  return { toc: tocHtml, html: modifiedHtml };
+}
+
+// ── Auto-insert AdSense ads in article content ───────────
+function insertAdsInContent(html) {
+  const AD_UNIT = `<div class="ad-container"><ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_ID}" data-ad-slot="auto" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({});</script></div>`;
+
+  const h2Positions = [];
+  const h2Regex = /<h2[\s>]/gi;
+  let match;
+  while ((match = h2Regex.exec(html)) !== null) {
+    h2Positions.push(match.index);
+  }
+
+  if (h2Positions.length < 2) return html;
+
+  // Insert ad before the 3rd H2 (or last if fewer) and before the last H2
+  const insertPositions = [];
+  if (h2Positions.length >= 3) {
+    insertPositions.push(h2Positions[2]); // before 3rd h2
+  }
+  if (h2Positions.length >= 5) {
+    insertPositions.push(h2Positions[4]); // before 5th h2
+  }
+
+  // Insert from end to start so positions don't shift
+  insertPositions.sort((a, b) => b - a);
+  for (const pos of insertPositions) {
+    html = html.slice(0, pos) + AD_UNIT + html.slice(pos);
+  }
+
+  return html;
+}
+
+// ── Extract FAQ pairs from content ───────────────────────
+function extractFAQs(html) {
+  const faqs = [];
+  // Match h3 followed by p (FAQ pattern)
+  const faqRegex = /<h3[^>]*>\s*([^<]*\?)\s*<\/h3>\s*<p>([\s\S]*?)<\/p>/gi;
+  let match;
+  while ((match = faqRegex.exec(html)) !== null) {
+    faqs.push({
+      question: match[1].replace(/<[^>]+>/g, '').trim(),
+      answer: match[2].replace(/<[^>]+>/g, '').trim()
+    });
+  }
+  return faqs;
+}
+
+// ── Related articles ─────────────────────────────────────
+let ALL_ARTICLES = []; // populated during build
+
+function getRelatedArticles(currentSlug, currentCategory, limit = 4) {
+  // Prefer same category, then others
+  const sameCategory = ALL_ARTICLES.filter(a => a.slug !== currentSlug && a.category === currentCategory);
+  const others = ALL_ARTICLES.filter(a => a.slug !== currentSlug && a.category !== currentCategory);
+  const related = [...sameCategory, ...others].slice(0, limit);
+  if (related.length === 0) return '';
+
+  return `<section class="related-articles">
+<h2>Artículos Relacionados</h2>
+<div class="related-grid">
+${related.map(a => `  <a href="${a.slug}" class="related-card">
+    <span class="related-cat">${a.category || 'General'}</span>
+    <h3>${a.title}</h3>
+    <p>${a.description ? a.description.slice(0, 100) + '...' : ''}</p>
+  </a>`).join('\n')}
+</div>
+</section>`;
+}
+
+// ── Schema builders ──────────────────────────────────────
+function buildBreadcrumbSchema(meta) {
+  const items = [{ name: 'Inicio', url: `https://${DOMAIN}/` }];
+  const slug = meta.slug || '/';
+
+  if (slug.startsWith('/blog/') && slug !== '/blog/') {
+    items.push({ name: 'Blog', url: `https://${DOMAIN}/blog/` });
+    items.push({ name: meta.title, url: `https://${DOMAIN}${slug}` });
+  } else if (slug === '/blog/') {
+    items.push({ name: 'Blog', url: `https://${DOMAIN}/blog/` });
+  } else if (slug !== '/') {
+    items.push({ name: meta.title, url: `https://${DOMAIN}${slug}` });
+  }
+
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": items.map((item, i) => ({
+      "@type": "ListItem",
+      "position": i + 1,
+      "name": item.name,
+      "item": item.url
+    }))
+  });
+}
+
+function buildArticleSchema(meta) {
+  const canonical = `https://${DOMAIN}${meta.slug || '/'}`;
+  const today = new Date().toISOString().split('T')[0];
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": meta.title,
+    "description": meta.description,
+    "url": canonical,
+    "datePublished": today,
+    "dateModified": today,
+    "author": {
+      "@type": "Organization",
+      "name": "Herramientas IA Estudio",
+      "url": `https://${DOMAIN}`
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Herramientas IA Estudio",
+      "url": `https://${DOMAIN}`
+    },
+    "mainEntityOfPage": { "@type": "WebPage", "@id": canonical },
+    "inLanguage": "es"
+  });
+}
+
+function buildFAQSchema(faqs) {
+  if (faqs.length === 0) return null;
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": faqs.map(faq => ({
+      "@type": "Question",
+      "name": faq.question,
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": faq.answer
+      }
+    }))
+  });
+}
+
+function buildWebSiteSchema() {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Herramientas IA Estudio",
+    "url": `https://${DOMAIN}`,
+    "description": "Las mejores herramientas de inteligencia artificial para estudiantes. Comparativas, guías y tutoriales en español.",
+    "inLanguage": "es",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": `https://${DOMAIN}/blog/?q={search_term_string}`,
+      "query-input": "required name=search_term_string"
+    }
+  });
+}
+
+function buildOrganizationSchema() {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Herramientas IA Estudio",
+    "url": `https://${DOMAIN}`,
+    "description": "Plataforma educativa que analiza y compara herramientas de IA para estudiantes.",
+    "sameAs": []
+  });
+}
+
+// ── Visible breadcrumbs HTML ─────────────────────────────
+function buildBreadcrumbsHTML(meta) {
+  const slug = meta.slug || '/';
+  if (slug === '/') return '';
+
+  let crumbs = `<a href="/">Inicio</a>`;
+  if (slug.startsWith('/blog/') && slug !== '/blog/') {
+    crumbs += ` <span class="bc-sep">/</span> <a href="/blog/">Blog</a>`;
+    crumbs += ` <span class="bc-sep">/</span> <span>${meta.title}</span>`;
+  } else if (slug === '/blog/') {
+    crumbs += ` <span class="bc-sep">/</span> <span>Blog</span>`;
+  } else {
+    crumbs += ` <span class="bc-sep">/</span> <span>${meta.title}</span>`;
+  }
+
+  return `<nav class="breadcrumbs" aria-label="Migas de pan">${crumbs}</nav>`;
+}
+
+// ── Cookie consent banner ────────────────────────────────
+function cookieConsentHTML() {
+  return `
+  <div id="cookie-banner" class="cookie-banner" style="display:none">
+    <div class="cookie-inner">
+      <p>Usamos cookies propias y de terceros (Google Analytics, Google AdSense) para analizar el tráfico y mostrar publicidad personalizada. Puedes aceptar, rechazar o ver más información en nuestra <a href="/politica-de-cookies/">Política de Cookies</a>.</p>
+      <div class="cookie-buttons">
+        <button onclick="acceptCookies()" class="cookie-btn cookie-accept">Aceptar</button>
+        <button onclick="rejectCookies()" class="cookie-btn cookie-reject">Rechazar</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    function acceptCookies(){document.getElementById('cookie-banner').style.display='none';localStorage.setItem('cookie-consent','accepted');loadAnalytics();}
+    function rejectCookies(){document.getElementById('cookie-banner').style.display='none';localStorage.setItem('cookie-consent','rejected');}
+    function loadAnalytics(){
+      if('${GA_ID}'==='G-XXXXXXXXXX')return;
+      var s=document.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id=${GA_ID}';document.head.appendChild(s);
+      s.onload=function(){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');};
+    }
+    (function(){
+      var c=localStorage.getItem('cookie-consent');
+      if(!c){document.getElementById('cookie-banner').style.display='flex';}
+      else if(c==='accepted'){loadAnalytics();}
+    })();
+  </script>`;
+}
+
+// ── Main page builder ────────────────────────────────────
 function page(meta, content, { isArticle = false, noAds = false } = {}) {
   const canonical = `https://${DOMAIN}${meta.slug || '/'}`;
   const adsenseCode = noAds ? '' : `
-    <!-- AdSense -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXX" crossorigin="anonymous"></script>`;
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_ID}" crossorigin="anonymous"></script>`;
+
+  // Schema.org structured data
+  const schemas = [];
+  schemas.push(`<script type="application/ld+json">${buildBreadcrumbSchema(meta)}</script>`);
+
+  if (isArticle) {
+    schemas.push(`<script type="application/ld+json">${buildArticleSchema(meta)}</script>`);
+    const faqs = extractFAQs(content);
+    const faqSchema = buildFAQSchema(faqs);
+    if (faqSchema) {
+      schemas.push(`<script type="application/ld+json">${faqSchema}</script>`);
+    }
+  }
+
+  if (meta.slug === '/') {
+    schemas.push(`<script type="application/ld+json">${buildWebSiteSchema()}</script>`);
+    schemas.push(`<script type="application/ld+json">${buildOrganizationSchema()}</script>`);
+  }
+
+  // For articles: add TOC, reading time, auto-ads, related articles
+  let articleHeader = '';
+  let finalContent = content;
+  let articleFooter = '';
+
+  if (isArticle) {
+    const readingTime = estimateReadingTime(content);
+    articleHeader = `<div class="article-meta-bar">
+      <span class="article-category">${meta.category || 'General'}</span>
+      <span class="article-reading-time">${readingTime} min de lectura</span>
+    </div>`;
+
+    const tocResult = generateTOC(finalContent);
+    finalContent = tocResult.html;
+
+    // Insert TOC after first <p> or after <h1>
+    const firstPEnd = finalContent.indexOf('</p>');
+    if (tocResult.toc && firstPEnd > -1) {
+      finalContent = finalContent.slice(0, firstPEnd + 4) + tocResult.toc + finalContent.slice(firstPEnd + 4);
+    }
+
+    // Auto-insert ads
+    if (!noAds) {
+      finalContent = insertAdsInContent(finalContent);
+    }
+
+    // Related articles
+    articleFooter = getRelatedArticles(meta.slug, meta.category);
+  }
+
+  const breadcrumbsHTML = buildBreadcrumbsHTML(meta);
+
+  // Ad banner top (for non-legal pages)
+  const adTop = noAds ? '' : `<div class="ad-container ad-top"><ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_ID}" data-ad-slot="auto" data-ad-format="horizontal" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({});</script></div>`;
+  const adBottom = noAds ? '' : `<div class="ad-container ad-bottom"><ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_ID}" data-ad-slot="auto" data-ad-format="horizontal" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({});</script></div>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -62,6 +365,7 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
   <meta name="description" content="${meta.description || ''}">
   ${meta.keywords ? `<meta name="keywords" content="${meta.keywords}">` : ''}
   <link rel="canonical" href="${canonical}">
+  <link rel="alternate" hreflang="es" href="${canonical}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -74,6 +378,18 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
   <meta property="og:url" content="${canonical}">
   <meta property="og:type" content="${isArticle ? 'article' : 'website'}">
   <meta property="og:site_name" content="Herramientas IA Estudio">
+  <meta property="og:locale" content="es_ES">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${meta.title || ''}">
+  <meta name="twitter:description" content="${meta.description || ''}">
+
+  <!-- Robots -->
+  <meta name="robots" content="${isLegalPage(meta.slug || '/') ? 'noindex, follow' : 'index, follow, max-snippet:-1, max-image-preview:large'}">
+
+  <!-- Schema.org -->
+  ${schemas.join('\n  ')}
 </head>
 <body>
   <header class="site-header">
@@ -99,7 +415,12 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
   </header>
 
   <main class="container">
-    ${content}
+    ${breadcrumbsHTML}
+    ${articleHeader}
+    ${adTop}
+    ${finalContent}
+    ${adBottom}
+    ${articleFooter}
   </main>
 
   <footer class="site-footer">
@@ -114,6 +435,10 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
     </div>
   </footer>
 
+  ${cookieConsentHTML()}
+
+  <button id="back-to-top" class="back-to-top" aria-label="Volver arriba" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8679;</button>
+
   <script>
     // Close dropdown on outside click
     document.addEventListener('click', function(e) {
@@ -125,6 +450,19 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         this.closest('.dropdown').classList.toggle('open');
+      });
+    });
+    // Back to top button visibility
+    var btt = document.getElementById('back-to-top');
+    window.addEventListener('scroll', function() {
+      btt.classList.toggle('visible', window.scrollY > 400);
+    });
+    // Smooth scroll for TOC links
+    document.querySelectorAll('.toc a').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        var target = document.querySelector(this.getAttribute('href'));
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
   </script>
@@ -190,7 +528,7 @@ function buildContactContent() {
 <p>Valoramos colaboraciones de calidad. Envíanos tu propuesta con un borrador del artículo y tu perfil profesional.</p>`;
 }
 
-// ── Cookie policy without WordPress cookies ──────────────
+// ── Cookie policy ────────────────────────────────────────
 function buildCookiesContent() {
   return `<h1>Política de Cookies</h1>
 
@@ -277,10 +615,15 @@ function buildBlogIndex() {
     const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
     const meta = extractMeta(html);
     if (!meta.title || !meta.slug) continue;
+    const content = stripComments(html);
+    const readTime = estimateReadingTime(content);
     cards += `
   <article class="blog-card">
+    <div class="blog-card-header">
+      <span class="blog-meta">${meta.category || 'General'}</span>
+      <span class="blog-read-time">${readTime} min</span>
+    </div>
     <h2><a href="${meta.slug}">${meta.title}</a></h2>
-    <p class="blog-meta">${meta.category || 'General'}</p>
     <p>${meta.description || ''}</p>
   </article>
 `;
@@ -295,9 +638,28 @@ ${cards}
 </div>`;
 }
 
+// ── 404 page ─────────────────────────────────────────────
+function build404() {
+  const meta = {
+    title: 'Página no encontrada | Herramientas IA Estudio',
+    description: 'La página que buscas no existe o ha sido movida.',
+    slug: '/404.html'
+  };
+  const content = `<div class="error-404">
+<h1>404 — Página no encontrada</h1>
+<p>Lo sentimos, la página que buscas no existe o ha sido movida.</p>
+<p>Puedes volver al <a href="/">inicio</a> o explorar nuestras <a href="/blog/">guías de IA para estudiantes</a>.</p>
+<div class="error-links">
+  <a href="/" class="cta-button">Ir al inicio</a>
+  <a href="/blog/" class="cta-button cta-secondary">Ver el blog</a>
+</div>
+</div>`;
+  return page(meta, content, { noAds: true });
+}
+
 // ── Build all pages ──────────────────────────────────────
 function build() {
-  // Clean site dir contents (without removing the dir itself — avoids EPERM on Windows)
+  // Clean site dir
   if (fs.existsSync(SITE_DIR)) {
     for (const entry of fs.readdirSync(SITE_DIR)) {
       const full = path.join(SITE_DIR, entry);
@@ -305,6 +667,18 @@ function build() {
     }
   }
   ensureDir(SITE_DIR);
+
+  // Pre-load all articles metadata for related articles
+  const blogDir = path.join(__dirname, 'blog');
+  const blogFiles = fs.readdirSync(blogDir).filter(f => f.endsWith('.html'));
+  ALL_ARTICLES = [];
+  for (const file of blogFiles) {
+    const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
+    const meta = extractMeta(html);
+    if (meta.title && meta.slug) {
+      ALL_ARTICLES.push(meta);
+    }
+  }
 
   // 1. CSS
   const css = fs.readFileSync(path.join(__dirname, 'config', 'style-guide.css'), 'utf8');
@@ -318,13 +692,10 @@ function build() {
   fs.writeFileSync(path.join(SITE_DIR, 'index.html'), page(homeMeta, homeContent));
 
   // 3. Blog articles
-  const blogDir = path.join(__dirname, 'blog');
-  const blogFiles = fs.readdirSync(blogDir).filter(f => f.endsWith('.html'));
   for (const file of blogFiles) {
     const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
     const meta = extractMeta(html);
     const content = stripComments(html);
-    // slug like /blog/mejores-ia-resumir-apuntes/
     const slugParts = meta.slug.replace(/^\//, '').replace(/\/$/, '').split('/');
     const outDir = path.join(SITE_DIR, ...slugParts);
     ensureDir(outDir);
@@ -371,7 +742,7 @@ function build() {
     fs.writeFileSync(path.join(outDir, 'index.html'), page(meta, content, { noAds: true }));
   }
 
-  // 7. Cookie policy (custom, no WordPress cookies, no ads)
+  // 7. Cookie policy
   const cookieMeta = {
     title: 'Política de Cookies | Herramientas IA Estudio',
     description: 'Información sobre las cookies que utiliza herramientasiaestudio.com, su finalidad y cómo gestionarlas.',
@@ -383,7 +754,7 @@ function build() {
     page(cookieMeta, buildCookiesContent(), { noAds: true })
   );
 
-  // 8. Contact page (custom with real form, no ads)
+  // 8. Contact page
   const contactMeta = {
     title: 'Contacto | Herramientas IA Estudio',
     description: '¿Tienes alguna pregunta o sugerencia? Contacta con el equipo de Herramientas IA Estudio. Respondemos en menos de 48 horas.',
@@ -395,36 +766,52 @@ function build() {
     page(contactMeta, buildContactContent(), { noAds: true })
   );
 
-  // 9. robots.txt
+  // 9. 404 page
+  fs.writeFileSync(path.join(SITE_DIR, '404.html'), build404());
+
+  // 10. robots.txt
   fs.writeFileSync(path.join(SITE_DIR, 'robots.txt'), `User-agent: *
 Allow: /
+Disallow: /404.html
 
 Sitemap: https://${DOMAIN}/sitemap.xml
 `);
 
-  // 10. Sitemap (dynamic)
+  // 11. Sitemap (dynamic)
   const urls = [
     '/', '/blog/',
     '/ia-resumir-textos/', '/ia-hacer-trabajos/', '/ia-estudiar-idiomas/', '/ia-examenes/',
     '/sobre-nosotros/', '/contacto/',
     '/politica-de-privacidad/', '/politica-de-cookies/', '/aviso-legal/'
   ];
-  // Add all blog article slugs dynamically
   for (const file of blogFiles) {
     const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
     const meta = extractMeta(html);
     if (meta.slug) urls.push(meta.slug);
   }
+  function urlPriority(u) {
+    if (u === '/') return { priority: '1.0', changefreq: 'daily' };
+    if (u === '/blog/') return { priority: '0.9', changefreq: 'daily' };
+    if (u.startsWith('/ia-')) return { priority: '0.8', changefreq: 'weekly' };
+    if (u.startsWith('/blog/')) return { priority: '0.7', changefreq: 'monthly' };
+    return { priority: '0.3', changefreq: 'monthly' };
+  }
+  const today = new Date().toISOString().split('T')[0];
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url>
+${urls.map(u => {
+    const p = urlPriority(u);
+    return `  <url>
     <loc>https://${DOMAIN}${u}</loc>
-    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
-  </url>`).join('\n')}
+    <lastmod>${today}</lastmod>
+    <changefreq>${p.changefreq}</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`;
+  }).join('\n')}
 </urlset>`;
   fs.writeFileSync(path.join(SITE_DIR, 'sitemap.xml'), sitemap);
 
-  console.log(`Site built! ${blogFiles.length} articles + ${catFiles.length} categories + legal/contact/home/blog-index`);
+  console.log(`Site built! ${blogFiles.length} articles + ${catFiles.length} categories + 404 + legal/contact/home/blog-index`);
   console.log(`Output: ${SITE_DIR}`);
 }
 
@@ -522,6 +909,150 @@ const EXTRA_CSS = `
   background: var(--color-bg-alt);
 }
 
+/* === BREADCRUMBS === */
+.breadcrumbs {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1.5rem;
+  padding: 0.5rem 0;
+}
+
+.breadcrumbs a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+  text-decoration: underline;
+}
+
+.bc-sep {
+  margin: 0 0.4rem;
+  color: var(--color-border);
+}
+
+/* === ARTICLE META BAR === */
+.article-meta-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.article-category {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+}
+
+.article-reading-time {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* === TABLE OF CONTENTS === */
+.toc {
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.toc-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+  color: var(--color-text);
+}
+
+.toc ol {
+  padding-left: 1.25rem;
+  margin: 0;
+}
+
+.toc li {
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.toc a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.toc a:hover {
+  text-decoration: underline;
+}
+
+/* === AD CONTAINERS === */
+.ad-container {
+  margin: 2rem 0;
+  text-align: center;
+  min-height: 90px;
+}
+
+.ad-top { margin-top: 1rem; }
+.ad-bottom { margin-bottom: 1rem; }
+
+/* === RELATED ARTICLES === */
+.related-articles {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.related-articles h2 {
+  margin-bottom: 1.25rem;
+}
+
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.related-card {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  text-decoration: none;
+  color: var(--color-text);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  display: block;
+}
+
+.related-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+.related-cat {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.related-card h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0;
+  line-height: 1.3;
+}
+
+.related-card p {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
 /* === MAIN === */
 main.container {
   padding-top: 2.5rem;
@@ -584,10 +1115,17 @@ main.container {
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
+.blog-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
 .blog-card h2 {
   font-size: 1.25rem;
   margin-top: 0;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .blog-card h2 a {
@@ -600,15 +1138,161 @@ main.container {
 }
 
 .blog-meta {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--color-primary);
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  background: var(--color-primary-light);
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+}
+
+.blog-read-time {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
 }
 
 .blog-card > p:last-child {
   color: var(--color-text-secondary);
   margin-bottom: 0;
+}
+
+/* === COOKIE BANNER === */
+.cookie-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(32, 33, 36, 0.97);
+  color: #fff;
+  z-index: 9999;
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(8px);
+}
+
+.cookie-inner {
+  max-width: 900px;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.cookie-inner p {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0;
+  flex: 1;
+  min-width: 250px;
+}
+
+.cookie-inner a {
+  color: #8ab4f8;
+  text-decoration: underline;
+}
+
+.cookie-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.cookie-btn {
+  border: none;
+  padding: 0.6rem 1.4rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cookie-accept {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.cookie-accept:hover {
+  background: var(--color-primary-dark);
+}
+
+.cookie-reject {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.cookie-reject:hover {
+  border-color: rgba(255,255,255,0.6);
+}
+
+/* === BACK TO TOP === */
+.back-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.back-to-top.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.back-to-top:hover {
+  background: var(--color-primary-dark);
+}
+
+/* === 404 PAGE === */
+.error-404 {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+
+.error-404 h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.error-404 p {
+  font-size: 1.1rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.error-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.cta-secondary {
+  background: var(--color-bg-alt) !important;
+  color: var(--color-primary) !important;
+  border: 1px solid var(--color-primary);
+}
+
+.cta-secondary:hover {
+  background: var(--color-primary-light) !important;
 }
 
 /* === CONTACT FORM === */
@@ -688,6 +1372,20 @@ main.container {
 
   .header-inner { max-width: 100%; }
   .footer-inner { max-width: 100%; }
+
+  .related-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cookie-inner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .back-to-top {
+    bottom: 5rem;
+    right: 1rem;
+  }
 }
 `;
 
