@@ -1,0 +1,46 @@
+name: Publicar artículo diario
+
+on:
+  schedule:
+    # Todos los días a las 07:00 UTC (09:00 hora España verano, 08:00 invierno)
+    - cron: '0 7 * * *'
+  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for drafts
+        id: check
+        run: |
+          COUNT=$(ls drafts/*.html 2>/dev/null | wc -l)
+          echo "drafts=$COUNT" >> $GITHUB_OUTPUT
+          if [ "$COUNT" -eq "0" ]; then
+            echo "No drafts available. Skipping."
+          fi
+
+      - name: Publish next draft
+        if: steps.check.outputs.drafts != '0'
+        run: node publish.js
+
+      - name: Build site
+        if: steps.check.outputs.drafts != '0'
+        run: node build.js
+
+      - name: Commit and push
+        if: steps.check.outputs.drafts != '0'
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "kyazz@herramientasiaestudio.com"
+          git add -A
+          ARTICLE=$(git diff --cached --name-only | grep "^blog/" | head -1)
+          git commit -m "Publicar artículo: $ARTICLE"
+          git push

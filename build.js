@@ -267,82 +267,42 @@ function buildCookiesContent() {
 <p>Para cualquier consulta, contacta con nosotros en: <strong>contacto@herramientasiaestudio.com</strong>.</p>`;
 }
 
-// ── Blog index page ──────────────────────────────────────
+// ── Blog index page (dynamic) ────────────────────────────
 function buildBlogIndex() {
+  const blogDir = path.join(__dirname, 'blog');
+  const blogFiles = fs.readdirSync(blogDir).filter(f => f.endsWith('.html')).sort().reverse();
+
+  let cards = '';
+  for (const file of blogFiles) {
+    const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
+    const meta = extractMeta(html);
+    if (!meta.title || !meta.slug) continue;
+    cards += `
+  <article class="blog-card">
+    <h2><a href="${meta.slug}">${meta.title}</a></h2>
+    <p class="blog-meta">${meta.category || 'General'}</p>
+    <p>${meta.description || ''}</p>
+  </article>
+`;
+  }
+
   return `<h1>Blog: Guías y Comparativas de IA para Estudiar</h1>
 
 <p>Todas nuestras guías, comparativas y tutoriales sobre herramientas de inteligencia artificial para estudiantes. Contenido actualizado, probado y en español.</p>
 
 <div class="blog-list">
-
-  <article class="blog-card">
-    <h2><a href="/blog/mejores-ia-resumir-apuntes/">Las 7 Mejores IA para Resumir Apuntes en 2026</a></h2>
-    <p class="blog-meta">IA para Resumir Textos</p>
-    <p>Comparativa de las mejores herramientas de inteligencia artificial para resumir apuntes. Análisis, precios y cuál elegir según tu perfil de estudiante.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/como-usar-chatgpt-para-estudiar/">Cómo Usar ChatGPT para Estudiar: Guía Completa</a></h2>
-    <p class="blog-meta">IA para Resumir Textos, IA para Exámenes</p>
-    <p>Aprende a usar ChatGPT para estudiar de forma eficiente: prompts, técnicas, ejemplos reales y errores que debes evitar.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/ia-para-hacer-trabajos-universidad/">IA para Hacer Trabajos de Universidad sin Plagiar</a></h2>
-    <p class="blog-meta">IA para Hacer Trabajos</p>
-    <p>Cómo usar inteligencia artificial para hacer trabajos universitarios de forma ética: herramientas, técnicas y límites que debes conocer.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/apps-ia-aprender-ingles/">5 Apps con IA para Aprender Inglés Gratis</a></h2>
-    <p class="blog-meta">IA para Estudiar Idiomas</p>
-    <p>Las mejores aplicaciones gratuitas con inteligencia artificial para aprender inglés: conversación, pronunciación, gramática y vocabulario.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/generar-examenes-tipo-test-con-ia/">Cómo Generar Exámenes Tipo Test con IA</a></h2>
-    <p class="blog-meta">IA para Exámenes</p>
-    <p>Aprende a crear exámenes tipo test automáticos con inteligencia artificial a partir de tus apuntes. Herramientas, prompts y trucos.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/herramientas-ia-gratis-estudiantes/">10 Herramientas IA Gratis para Estudiantes</a></h2>
-    <p class="blog-meta">General</p>
-    <p>Las mejores herramientas de inteligencia artificial gratuitas para estudiantes: resúmenes, trabajos, idiomas, exámenes y organización.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/chatgpt-para-practicar-idiomas/">Cómo Usar ChatGPT para Practicar Idiomas</a></h2>
-    <p class="blog-meta">IA para Estudiar Idiomas</p>
-    <p>Técnicas y prompts para usar ChatGPT como tutor de idiomas: inglés, francés, alemán y más.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/ia-para-oposiciones/">IA para Oposiciones: Herramientas para Prepararte Mejor</a></h2>
-    <p class="blog-meta">IA para Exámenes</p>
-    <p>Cómo usar inteligencia artificial para preparar oposiciones: memorización, tests, esquemas y planificación del estudio.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/notion-ai-para-estudiantes/">Cómo Usar Notion AI para Organizar el Estudio</a></h2>
-    <p class="blog-meta">IA para Resumir Textos</p>
-    <p>Aprende a usar Notion AI para organizar apuntes, crear planificadores de estudio, resumir contenido y gestionar tu vida académica.</p>
-  </article>
-
-  <article class="blog-card">
-    <h2><a href="/blog/ia-vs-metodos-tradicionales-estudio/">IA vs Métodos Tradicionales: ¿Qué Funciona Mejor?</a></h2>
-    <p class="blog-meta">General</p>
-    <p>Comparativa objetiva entre herramientas de IA y métodos tradicionales de estudio. Cuándo usar cada uno y cómo combinarlos.</p>
-  </article>
-
+${cards}
 </div>`;
 }
 
 // ── Build all pages ──────────────────────────────────────
 function build() {
-  // Clean and create site dir
+  // Clean site dir contents (without removing the dir itself — avoids EPERM on Windows)
   if (fs.existsSync(SITE_DIR)) {
-    fs.rmSync(SITE_DIR, { recursive: true });
+    for (const entry of fs.readdirSync(SITE_DIR)) {
+      const full = path.join(SITE_DIR, entry);
+      fs.rmSync(full, { recursive: true, force: true });
+    }
   }
   ensureDir(SITE_DIR);
 
@@ -442,23 +402,24 @@ Allow: /
 Sitemap: https://${DOMAIN}/sitemap.xml
 `);
 
-  // 10. Sitemap
+  // 10. Sitemap (dynamic)
   const urls = [
     '/', '/blog/',
     '/ia-resumir-textos/', '/ia-hacer-trabajos/', '/ia-estudiar-idiomas/', '/ia-examenes/',
-    '/blog/mejores-ia-resumir-apuntes/', '/blog/como-usar-chatgpt-para-estudiar/',
-    '/blog/ia-para-hacer-trabajos-universidad/', '/blog/apps-ia-aprender-ingles/',
-    '/blog/generar-examenes-tipo-test-con-ia/', '/blog/herramientas-ia-gratis-estudiantes/',
-    '/blog/chatgpt-para-practicar-idiomas/', '/blog/ia-para-oposiciones/',
-    '/blog/notion-ai-para-estudiantes/', '/blog/ia-vs-metodos-tradicionales-estudio/',
     '/sobre-nosotros/', '/contacto/',
     '/politica-de-privacidad/', '/politica-de-cookies/', '/aviso-legal/'
   ];
+  // Add all blog article slugs dynamically
+  for (const file of blogFiles) {
+    const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
+    const meta = extractMeta(html);
+    if (meta.slug) urls.push(meta.slug);
+  }
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(u => `  <url>
     <loc>https://${DOMAIN}${u}</loc>
-    <lastmod>2026-03-23</lastmod>
+    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
   </url>`).join('\n')}
 </urlset>`;
   fs.writeFileSync(path.join(SITE_DIR, 'sitemap.xml'), sitemap);
