@@ -174,7 +174,7 @@ function buildContactContent() {
 <h2>Otros Canales</h2>
 
 <ul>
-  <li><strong>Email:</strong> contacto@herramientasiaestudio.com</li>
+  <li><strong>Email:</strong> kyazz@herramientasiaestudio.com</li>
   <li><strong>Twitter/X:</strong> @herramientasiaestudio</li>
 </ul>
 
