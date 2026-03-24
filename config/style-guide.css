@@ -1,0 +1,190 @@
+/*
+=============================================================
+GUÍA DE ESTILOS — herramientasiaestudio.com
+=============================================================
+Aplicar en WordPress: Apariencia > Personalizar > CSS adicional
+O en el archivo style.css del tema hijo
+=============================================================
+*/
+
+/* === COLORES PRINCIPALES === */
+:root {
+  --color-primary: #1a73e8;       /* Azul principal */
+  --color-primary-dark: #1557b0;  /* Azul oscuro (hover) */
+  --color-primary-light: #e8f0fe; /* Azul muy claro (fondos) */
+  --color-text: #202124;          /* Negro/gris oscuro (texto) */
+  --color-text-secondary: #5f6368;/* Gris medio (texto secundario) */
+  --color-bg: #ffffff;            /* Blanco (fondo principal) */
+  --color-bg-alt: #f8f9fa;        /* Gris claro (fondo alternativo) */
+  --color-border: #dadce0;        /* Gris borde */
+  --color-success: #34a853;       /* Verde (CTA, positivo) */
+}
+
+/* === TIPOGRAFÍA === */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+h1 { font-size: 2rem; margin-bottom: 1rem; }
+h2 { font-size: 1.5rem; margin-top: 2.5rem; margin-bottom: 0.75rem; }
+h3 { font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+
+p {
+  margin-bottom: 1.2rem;
+}
+
+/* === ENLACES === */
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+/* === TARJETAS DE HERRAMIENTAS === */
+.herramientas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.herramienta-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.herramienta-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.herramienta-card h3 {
+  color: var(--color-primary);
+  margin-top: 0;
+}
+
+/* === TARJETAS DE CATEGORÍA === */
+.categorias-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.categoria-card {
+  display: block;
+  background: var(--color-primary-light);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: var(--color-text);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.categoria-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(26, 115, 232, 0.15);
+  text-decoration: none;
+}
+
+.categoria-card h3 {
+  color: var(--color-primary);
+  margin-top: 0;
+}
+
+/* === BOTÓN CTA === */
+.cta-button {
+  display: inline-block;
+  background: var(--color-primary);
+  color: #ffffff;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+
+.cta-button:hover {
+  background: var(--color-primary-dark);
+  color: #ffffff;
+  text-decoration: none;
+}
+
+/* === TABLAS === */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.95rem;
+}
+
+th {
+  background: var(--color-primary);
+  color: #ffffff;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+}
+
+td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+tr:nth-child(even) {
+  background: var(--color-bg-alt);
+}
+
+/* === BLOCKQUOTES (prompts) === */
+blockquote {
+  background: var(--color-bg-alt);
+  border-left: 4px solid var(--color-primary);
+  padding: 1rem 1.5rem;
+  margin: 1.5rem 0;
+  border-radius: 0 8px 8px 0;
+  font-style: normal;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+/* === LISTAS === */
+ul, ol {
+  margin-bottom: 1.2rem;
+  padding-left: 1.5rem;
+}
+
+li {
+  margin-bottom: 0.5rem;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  body { font-size: 16px; }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.3rem; }
+  .herramientas-grid,
+  .categorias-grid {
+    grid-template-columns: 1fr;
+  }
+  table { font-size: 0.85rem; }
+  th, td { padding: 8px 10px; }
+}
