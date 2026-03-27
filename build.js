@@ -788,7 +788,10 @@ Disallow: /404.html
 Sitemap: https://${DOMAIN}/sitemap.xml
 `);
 
-  // 11. Sitemap (dynamic) — exclude noindex pages
+  // 11. ads.txt (AdSense)
+  fs.writeFileSync(path.join(SITE_DIR, 'ads.txt'), `google.com, pub-3882735980092049, DIRECT, f08c47fec0942fa0\n`);
+
+  // 12. Sitemap (dynamic) — exclude noindex pages
   const urls = [
     '/', '/blog/',
     '/ia-resumir-textos/', '/ia-hacer-trabajos/', '/ia-estudiar-idiomas/', '/ia-examenes/'
