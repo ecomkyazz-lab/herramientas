@@ -3,7 +3,7 @@ const path = require('path');
 
 const SITE_DIR = path.join(__dirname, 'site');
 const DOMAIN = 'herramientasiaestudio.com';
-const ADSENSE_ID = 'ca-pub-XXXXXXXXXX'; // Replace with your real AdSense ID
+const ADSENSE_ID = 'ca-pub-3882735980092049';
 const GA_ID = 'G-XXXXXXXXXX'; // Replace with your real GA4 Measurement ID
 
 // ── helpers ──────────────────────────────────────────────
@@ -364,6 +364,7 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
   <title>${meta.title || 'Herramientas IA Estudio'}</title>
   <meta name="description" content="${meta.description || ''}">
   ${meta.keywords ? `<meta name="keywords" content="${meta.keywords}">` : ''}
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="canonical" href="${canonical}">
   <link rel="alternate" hreflang="es" href="${canonical}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -394,7 +395,7 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
 <body>
   <header class="site-header">
     <div class="container header-inner">
-      <a href="/" class="logo">Herramientas IA Estudio</a>
+      <a href="/" class="logo"><img src="/assets/logo.svg" alt="Herramientas IA Estudio" class="logo-icon" width="36" height="36"><span>Herramientas IA Estudio</span></a>
       <button class="menu-toggle" aria-label="Menú" onclick="document.querySelector('.nav-menu').classList.toggle('open')">&#9776;</button>
       <nav class="nav-menu">
         <a href="/">Inicio</a>
@@ -684,6 +685,16 @@ function build() {
   const css = fs.readFileSync(path.join(__dirname, 'config', 'style-guide.css'), 'utf8');
   fs.writeFileSync(path.join(SITE_DIR, 'style.css'), css + EXTRA_CSS);
 
+  // Copy assets (logo, favicon)
+  const assetsDir = path.join(__dirname, 'assets');
+  const siteAssetsDir = path.join(SITE_DIR, 'assets');
+  if (fs.existsSync(assetsDir)) {
+    ensureDir(siteAssetsDir);
+    for (const file of fs.readdirSync(assetsDir)) {
+      fs.copyFileSync(path.join(assetsDir, file), path.join(siteAssetsDir, file));
+    }
+  }
+
   // 2. Home page
   const homeHtml = fs.readFileSync(path.join(__dirname, 'home', 'index.html'), 'utf8');
   const homeMeta = extractMeta(homeHtml);
@@ -777,12 +788,10 @@ Disallow: /404.html
 Sitemap: https://${DOMAIN}/sitemap.xml
 `);
 
-  // 11. Sitemap (dynamic)
+  // 11. Sitemap (dynamic) — exclude noindex pages
   const urls = [
     '/', '/blog/',
-    '/ia-resumir-textos/', '/ia-hacer-trabajos/', '/ia-estudiar-idiomas/', '/ia-examenes/',
-    '/sobre-nosotros/', '/contacto/',
-    '/politica-de-privacidad/', '/politica-de-cookies/', '/aviso-legal/'
+    '/ia-resumir-textos/', '/ia-hacer-trabajos/', '/ia-estudiar-idiomas/', '/ia-examenes/'
   ];
   for (const file of blogFiles) {
     const html = fs.readFileSync(path.join(blogDir, file), 'utf8');
@@ -845,13 +854,20 @@ const EXTRA_CSS = `
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-primary);
   text-decoration: none;
 }
 
-.logo:hover { text-decoration: none; }
+.logo-icon {
+  flex-shrink: 0;
+}
+
+.logo:hover { text-decoration: none; opacity: 0.85; }
 
 .nav-menu {
   display: flex;
