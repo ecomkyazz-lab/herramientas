@@ -364,8 +364,8 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
   <title>${meta.title || 'Herramientas IA Estudio'}</title>
   <meta name="description" content="${meta.description || ''}">
   ${meta.keywords ? `<meta name="keywords" content="${meta.keywords}">` : ''}
-  <link rel="icon" type="image/png" href="/assets/logo.png">
-  <link rel="apple-touch-icon" href="/assets/logo.png">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="apple-touch-icon" href="/assets/logo.svg">
   <link rel="canonical" href="${canonical}">
   <link rel="alternate" hreflang="es" href="${canonical}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -381,14 +381,14 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
   <meta property="og:type" content="${isArticle ? 'article' : 'website'}">
   <meta property="og:site_name" content="Herramientas IA Estudio">
   <meta property="og:locale" content="es_ES">
-  <meta property="og:image" content="https://${DOMAIN}/assets/logo.png">
+  <meta property="og:image" content="https://${DOMAIN}/assets/logo.svg">
   <meta property="og:image:alt" content="Herramientas IA Estudio">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${meta.title || ''}">
   <meta name="twitter:description" content="${meta.description || ''}">
-  <meta name="twitter:image" content="https://${DOMAIN}/assets/logo.png">
+  <meta name="twitter:image" content="https://${DOMAIN}/assets/logo.svg">
 
   <!-- Robots -->
   <meta name="robots" content="${isLegalPage(meta.slug || '/') ? 'noindex, follow' : 'index, follow, max-snippet:-1, max-image-preview:large'}">
@@ -399,7 +399,7 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
 <body>
   <header class="site-header">
     <div class="container header-inner">
-      <a href="/" class="logo"><img src="/assets/logo.png" alt="Herramientas IA Estudio" class="logo-icon" width="36" height="36"><span>Herramientas IA Estudio</span></a>
+      <a href="/" class="logo"><img src="/assets/logo.svg" alt="Herramientas IA Estudio" class="logo-icon" width="36" height="36"><span>Herramientas IA Estudio</span></a>
       <button class="menu-toggle" aria-label="Menú" onclick="document.querySelector('.nav-menu').classList.toggle('open')">&#9776;</button>
       <nav class="nav-menu">
         <a href="/">Inicio</a>
