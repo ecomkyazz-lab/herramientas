@@ -872,7 +872,7 @@ const EXTRA_CSS = `
 
 .logo-icon {
   flex-shrink: 0;
-  margin-top: 0px;
+  margin-top: 2px;
 }
 
 .logo:hover { text-decoration: none; opacity: 0.85; }
