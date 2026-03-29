@@ -399,7 +399,7 @@ function page(meta, content, { isArticle = false, noAds = false } = {}) {
 <body>
   <header class="site-header">
     <div class="container header-inner">
-      <a href="/" class="logo"><img src="/assets/logo.png" alt="Herramientas IA Estudio" class="logo-icon" width="36" height="36"><span>Herramientas IA Estudio</span></a>
+      <a href="/" class="logo"><img src="/assets/logo.png" alt="Herramientas IA Estudio" class="logo-icon" width="48" height="48"><span>Herramientas IA Estudio</span></a>
       <button class="menu-toggle" aria-label="Menú" onclick="document.querySelector('.nav-menu').classList.toggle('open')">&#9776;</button>
       <nav class="nav-menu">
         <a href="/">Inicio</a>
@@ -855,7 +855,7 @@ const EXTRA_CSS = `
 .header-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   max-width: 1100px;
   padding: 1rem 1.5rem;
 }
@@ -863,8 +863,8 @@ const EXTRA_CSS = `
 .logo {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.25rem;
+  gap: 0.6rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--color-primary);
   text-decoration: none;
