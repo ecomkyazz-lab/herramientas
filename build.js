@@ -855,7 +855,7 @@ const EXTRA_CSS = `
 .header-inner {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   max-width: 1100px;
   padding: 1rem 1.5rem;
 }
