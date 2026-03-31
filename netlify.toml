@@ -2,6 +2,9 @@
   command = "node build.js"
   publish = "site"
 
+[build.processing.html]
+  pretty_urls = true
+
 # Security headers for all pages
 [[headers]]
   for = "/*"
